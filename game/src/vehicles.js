@@ -5,7 +5,7 @@ import { clamp } from './random.js';
 
 let nextId = 1;
 export function makeCar(x, y, angle, color, opts = {}) {
-  return { id: nextId++, x, y, angle, speed: 0, color, w: 48, h: 24, health: 100, parked: !!opts.parked, police: !!opts.police, driver: opts.driver || null, lane: opts.lane || 0, targetSpeed: opts.targetSpeed || 0, stuck: 0, smoke: 0 };
+  return { id: nextId++, x, y, angle, speed: 0, color, w: 48, h: 24, health: 100, parked: !!opts.parked, police: !!opts.police, driver: opts.driver || null, lane: opts.lane || 0, targetSpeed: opts.targetSpeed || 0, stuck: 0, smoke: 0, cruise: opts.cruise || 165, missionCar: !!opts.missionCar, repoCar: !!opts.repoCar, sideCar: !!opts.sideCar };
 }
 
 export function spawnTraffic(world, rng, count) {
@@ -25,7 +25,7 @@ export function spawnTraffic(world, rng, count) {
 
 export function updateTraffic(car, dt, allCars, playerPos) {
   if (car.parked || car.driver !== 'traffic') return;
-  const cruise = 165;
+  const cruise = car.cruise || 165;
   let want = cruise;
   // Stop when something is ahead.
   for (const o of allCars) {

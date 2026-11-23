@@ -1,7 +1,9 @@
 // A tiny static server for game/ (Node 22, standard library only), so an entry can be played
 // locally without a build step: `node serve.ts` serves game/ on http://localhost:8080.
-// It sends the MIME types a browser game needs, refuses any path outside game/, and otherwise
-// does nothing clever: this is a development convenience, not a web server for the internet.
+// It sends the MIME types a browser game needs, refuses any path outside game/, answers
+// If-None-Match with 304 for unchanged files, and caches only media/font assets (HTML and
+// scripts always revalidate, so a rebuilt game is never masked by a stale module).
+// This is a development convenience, not a web server for the internet.
 import { createReadStream, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -35,7 +37,14 @@ const MIME: Record<string, string> = {
   '.mp3': 'audio/mpeg',
   '.ogg': 'audio/ogg',
   '.txt': 'text/plain; charset=utf-8',
+  '.avif': 'image/avif',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.woff': 'font/woff',
 };
+
+// Assets that change rarely may sit in the browser cache for an hour; documents and
+// code must not, or an edited module would keep serving its previous version.
+const CACHEABLE = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg', '.ico', '.woff', '.woff2', '.wav', '.mp3', '.ogg']);
 
 createServer((request, response) => {
   const url = new URL(request.url ?? '/', 'http://localhost');
@@ -53,18 +62,26 @@ createServer((request, response) => {
     return;
   }
   let size: number;
+  let etag: string;
   try {
     const stats = statSync(file);
     if (!stats.isFile()) throw new Error('not a file');
     size = stats.size;
+    etag = `"${stats.size.toString(16)}-${Math.floor(stats.mtimeMs).toString(16)}"`;
   } catch {
     response.writeHead(404).end('not found');
     return;
   }
+  if (request.headers['if-none-match'] === etag) {
+    response.writeHead(304, { etag }).end();
+    return;
+  }
+  const ext = extname(file).toLowerCase();
   response.writeHead(200, {
-    'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-type': MIME[ext] ?? 'application/octet-stream',
     'content-length': size,
-    'cache-control': 'no-store',
+    etag,
+    'cache-control': CACHEABLE.has(ext) ? 'public, max-age=3600' : 'no-store',
   });
   createReadStream(file).pipe(response);
 }).listen(port, '127.0.0.1', () => {

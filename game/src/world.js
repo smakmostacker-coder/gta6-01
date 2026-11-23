@@ -7,6 +7,9 @@ export function roadYs() { const ys = []; for (let y = 250; y < WORLD.h - 300; y
 export function onRoadX(x) { return roadXs().some((rx) => Math.abs(x - rx) < ROAD.width / 2); }
 export function onRoadY(y) { return roadYs().some((ry) => Math.abs(y - ry) < ROAD.width / 2); }
 export function isRoad(x, y) { return onRoadX(x) || onRoadY(y) || y > WORLD.h - 260; }
+// Every road crossing in the city: the pool side quests draw pickups, fares and
+// race checkpoints from, so a job destination is always reachable by road.
+export function intersections() { const pts = []; for (const x of roadXs()) for (const y of roadYs()) pts.push({ x, y }); return pts; }
 
 export function createWorld(seed) {
   const rng = createRandom(seed * 7919 + 13);

@@ -11,7 +11,7 @@ export function tryPunch(game) {
   c.flashes.push({ x: fx, y: fy, r: 16, t: 0.1, color: '#ffeaa7' });
   for (const ped of game.peds) {
     if (ped.down <= 0 && Math.hypot(ped.x - fx, ped.y - fy) < 30) {
-      ped.down = 4; ped.state = 'down'; game.audio.hit();
+      ped.down = 4; ped.state = 'down'; game.audio.hit(); game.stats.knockouts++;
       addCrime(game.wanted, 0.7, game); scarePeds(game.peds, p.x, p.y, 190);
       game.floaters.push({ x: ped.x, y: ped.y - 24, text: 'KNOCKED OUT', t: 1.1, color: '#ff7675' });
     }
@@ -39,6 +39,7 @@ export function updateCombat(game, dt) {
     for (const ped of game.peds) {
       if (ped.down <= 0 && b.life > 0 && Math.hypot(ped.x - b.x, ped.y - b.y) < 13) {
         ped.down = 5; b.life = 0; game.audio.hit(); addCrime(game.wanted, 0.8, game);
+        game.stats.kills++; // a shooting counts as a take-out for the ending record; a punch does not
         game.floaters.push({ x: ped.x, y: ped.y - 24, text: 'DOWN', t: 1, color: '#ff7675' });
       }
     }

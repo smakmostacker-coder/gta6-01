@@ -1,6 +1,7 @@
 // Wanted system and police: stars rise with crimes, decay out of sight, cops chase and bust.
 import { WORLD } from './config.js';
 import { makeCar } from './vehicles.js';
+import { rectHitsBuilding } from './world.js';
 import { clamp } from './random.js';
 
 export function createWanted() { return { stars: 0, heat: 0, hideTimer: 0, seenTimer: 0 }; }
@@ -48,6 +49,11 @@ export function updatePolice(game, dt) {
     cop.speed += clamp(want - cop.speed, -420 * dt, 260 * dt);
     cop.x += Math.cos(cop.angle) * cop.speed * dt;
     cop.y += Math.sin(cop.angle) * cop.speed * dt;
+    // Cop cars respect buildings too: back out and shed speed instead of ghosting through.
+    if (rectHitsBuilding(game.world, cop.x, cop.y, 24, 13)) {
+      cop.x -= Math.cos(cop.angle) * cop.speed * dt * 1.6; cop.y -= Math.sin(cop.angle) * cop.speed * dt * 1.6;
+      cop.speed *= -0.2; cop.health -= 3;
+    }
     cop.x = clamp(cop.x, 26, WORLD.w - 26); cop.y = clamp(cop.y, 26, WORLD.h - 26);
   }
   // Bust meter fills while a cop is right on top of a slow or on-foot player.

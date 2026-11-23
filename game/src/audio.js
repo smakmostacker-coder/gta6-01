@@ -33,6 +33,9 @@ export function createAudio() {
     enterCar() { tone(300, 0.1, 'sine', 0.12, 120); },
     crash() { noise(0.25, 0.3); tone(90, 0.25, 'sine', 0.25, -40); },
     mission() { [523, 659, 784].forEach((f, i) => setTimeout(() => tone(f, 0.16, 'triangle', 0.13), i * 110)); },
+    choice() { tone(520, 0.07, 'triangle', 0.12); setTimeout(() => tone(390, 0.09, 'triangle', 0.1), 55); },
+    jobDone() { [784, 988, 1175].forEach((f, i) => setTimeout(() => tone(f, 0.13, 'square', 0.09), i * 80)); },
+    ending() { [392, 523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.3, 'triangle', 0.11), i * 170)); },
     busted() { tone(400, 0.5, 'sawtooth', 0.12, -250); },
     setEngine(on, speed = 0) {
       const c = ensure(); if (!c) return;

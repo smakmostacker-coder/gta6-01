@@ -17,6 +17,12 @@ export function createInput(canvas) {
     keys, mouse,
     down: (...codes) => codes.some((c) => keys.has(c)),
     wasPressed: (code) => pressed.has(code),
+    // Dialogue choices: Digit1 / Digit2 (or numpad) pick an option, -1 when neither.
+    choiceIndex() {
+      if (this.wasPressed('Digit1') || this.wasPressed('Numpad1')) return 0;
+      if (this.wasPressed('Digit2') || this.wasPressed('Numpad2')) return 1;
+      return -1;
+    },
     endFrame() { pressed.clear(); mouse.clicked = false; },
     moveVector() {
       let x = 0, y = 0;

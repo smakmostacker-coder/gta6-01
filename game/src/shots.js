@@ -1,5 +1,7 @@
 // Screenshot staging: ?shot=<scene>&seed=<n> freezes a deterministic, lively scene for capture.
+// v2 scenes: 'side' stages a taxi fare mid-pickup, 'ending' stages the CLEAN GETAWAY ending screen.
 import { makeCar } from './vehicles.js';
+import { endingById } from './endings.js';
 
 export function stageShot(game, scene) {
   game.shotMode = true;
@@ -26,6 +28,26 @@ export function stageShot(game, scene) {
     game.cars.push(makeCar(1900, 1310, Math.PI, '#2d3436', { driver: 'police', police: true }));
     game.missions.index = 3; game.startCurrentMissionSilent(); game.missions.stage = 1; game.missions.marker = { x: 290, y: 420 };
     clusterPeds(game, 1660, 1180, 6);
+  } else if (scene === 'side') {
+    p.x = 1150; p.y = 1276;
+    const car = makeCar(1150, 1276, 0, '#f1c40f', { driver: 'player' });
+    game.cars.push(car); game.enterCarSilent(car);
+    game.side.done = 3; game.stats.earned = 940;
+    game.side.active = { type: 'taxi', name: 'Taxi Fare', stage: 0, timer: 64, reward: 180, target: { x: 1420, y: 1250 }, ped: null, car: null, checks: [], idx: 0, home: { x: 1276, y: 1250 } };
+    game.side.marker = { x: 1420, y: 1250 };
+    const fare = game.peds[4]; if (fare) { fare.x = 1420; fare.y = 1250; fare.state = 'wait'; fare.shirt = '#ffeaa7'; }
+    game.missions.index = 4; game.missions.complete = true;
+    placeCars(game, [[1500, 1224, Math.PI, '#3498db'], [900, 1224, Math.PI, '#2ecc71']]);
+    clusterPeds(game, 1080, 1180, 5);
+  } else if (scene === 'ending') {
+    p.x = 290; p.y = 420;
+    game.choices.sparedRico = true; game.choices.sharedCut = true;
+    game.stats.earned = 2550; game.side.done = 4; game.player.money = 1420;
+    game.missions.index = 4; game.missions.complete = true;
+    game.ending = endingById('clean');
+    if (!game.endingsUnlocked.includes('clean')) game.endingsUnlocked.push('clean');
+    game.screen = 'ending';
+    clusterPeds(game, 340, 470, 4);
   } else if (scene === 'mission') {
     p.x = 2265; p.y = 1335; p.angle = 0.3;
     game.missions.index = 2; game.startCurrentMissionSilent();

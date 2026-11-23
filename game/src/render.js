@@ -13,6 +13,7 @@ function drawCar(ctx, car) {
   ctx.fillStyle = '#aee9ff'; ctx.fillRect(2, -car.h / 2 + 4, 10, car.h - 8); ctx.fillRect(-14, -car.h / 2 + 4, 7, car.h - 8);
   ctx.fillStyle = '#1e272e'; [[-16, -13], [14, -13], [-16, 9], [14, 9]].forEach(([x, y]) => ctx.fillRect(x, y, 9, 5));
   if (car.missionCar) { ctx.fillStyle = '#fdcb6e'; ctx.font = 'bold 15px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('▼', 0, -22); }
+  if (car.repoCar) { ctx.fillStyle = '#a29bfe'; ctx.font = 'bold 15px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('▼ REPO', 0, -22); }
   if (car.health < 45) { ctx.fillStyle = 'rgba(90,90,90,0.55)'; ctx.beginPath(); ctx.arc(-16, 0, 8 + Math.random() * 5, 0, 7); ctx.fill(); }
   ctx.restore();
 }
@@ -72,9 +73,25 @@ export function drawWorld(ctx, game, w, h) {
     ctx.fillStyle = '#fdcb6e'; ctx.beginPath(); ctx.arc(mk.x, mk.y, 17 + Math.sin(game.time * 4) * 3, 0, 7); ctx.fill();
     ctx.fillStyle = '#2d3436'; ctx.font = 'bold 18px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('!', mk.x, mk.y + 6);
   }
+  // Side quest markers: idle job boards get a pulsing ring and letter; the active
+  // target gets the tall cyan pillar, the side-quest twin of the story marker.
+  if (!game.side.active) {
+    for (const s of game.side.spots) {
+      ctx.strokeStyle = s.color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 30 + Math.sin(game.time * 3) * 4, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = s.color; ctx.font = 'bold 20px ' + FONT; ctx.textAlign = 'center'; ctx.fillText(s.letter, s.x, s.y + 7);
+      ctx.font = 'bold 10px ' + FONT; ctx.fillStyle = '#fff'; ctx.fillText(s.label, s.x, s.y + 48);
+    }
+  }
+  if (game.side.marker && !game.missions.dialogue) {
+    const mk = game.side.marker;
+    ctx.fillStyle = 'rgba(0,206,201,0.32)'; ctx.fillRect(mk.x - 18, mk.y - 170, 36, 170);
+    ctx.fillStyle = '#00cec9'; ctx.beginPath(); ctx.arc(mk.x, mk.y, 15 + Math.sin(game.time * 4) * 3, 0, 7); ctx.fill();
+    ctx.fillStyle = '#083638'; ctx.font = 'bold 16px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('$', mk.x, mk.y + 5);
+  }
   // Cars, peds, player.
   for (const car of game.cars) { if (car.x > vx0 && car.x < vx1 && car.y > vy0 && car.y < vy1) drawCar(ctx, car); }
-  for (const ped of game.peds) { if (ped.x > vx0 && ped.x < vx1 && ped.y > vy0 && ped.y < vy1) drawPerson(ctx, ped.x, ped.y, ped.angle, ped.shirt, ped.skin, { down: ped.down > 0 }); }
+  for (const ped of game.peds) { if (ped.gone) continue; if (ped.x > vx0 && ped.x < vx1 && ped.y > vy0 && ped.y < vy1) drawPerson(ctx, ped.x, ped.y, ped.angle, ped.shirt, ped.skin, { down: ped.down > 0 }); }
   if (!game.playerCar()) {
     const p = game.player;
     drawPerson(ctx, p.x, p.y, p.angle, '#ff2d55', '#f1c27d', {});

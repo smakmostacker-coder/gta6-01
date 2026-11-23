@@ -5,7 +5,10 @@
 // /output and writes /output/dossier.json, the summary the judge reads, using the vendored
 // make.fun library in vendor/. The game is a top-down open-world crime game: a grid city with
 // traffic and pedestrians, stealable cars, a wanted system with police chases, punches and a
-// pistol, and a four-mission story chain with a minimap HUD and synth sound.
+// pistol, and a four-mission story chain with a minimap HUD and synth sound. The v2 upgrade
+// adds five repeatable side jobs (taxi fares, a street race, vigilante work, courier runs and
+// car repossession), three story choice beats, and six endings resolved from the player's
+// choices and lifetime record - all still plain modules under game/src/, nothing vendored.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

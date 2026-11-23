@@ -19,7 +19,9 @@ export function scarePeds(peds, x, y, radius) {
 }
 export function updatePeds(peds, world, dt, danger) {
   for (const p of peds) {
+    if (p.gone) continue; // riding in a car (a taxi fare on board) - not in the world
     if (p.down > 0) { p.down -= dt; continue; }
+    if (p.state === 'wait') { p.moving = false; continue; } // a fare or a marked target holding position
     p.timer -= dt;
     if (danger && Math.hypot(p.x - danger.x, p.y - danger.y) < 110) { p.state = 'flee'; p.panic = Math.max(p.panic, 0.6); p.fleeX = p.x + (p.x - danger.x) * 2; p.fleeY = p.y + (p.y - danger.y) * 2; }
     let tx = null, ty = null, sp = 52;

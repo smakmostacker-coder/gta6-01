@@ -1,5 +1,7 @@
-// Palm Cove: Sunset Heist - boot, game loop and state machine (title, play, pause, busted, wasted).
+// Palm Cove: Sunset Heist - boot, game loop and state machine (title, play, pause, busted, wasted, ending).
 // Vera Solano works off a debt across a sun-soaked grid city: steal cars, run jobs, dodge the law.
+// v2 wires in the side quests (taxi, race, vigilante, courier, repo), the story choice beats and
+// the six-ending resolution: every run is scored on cash earned, busts, take-outs and loyalty.
 import { STEP, PLAYER, WORLD, FONT } from './config.js';
 import { createRandom, clamp } from './random.js';
 import { createInput } from './input.js';
@@ -10,7 +12,9 @@ import { spawnTraffic, updateTraffic, driveCar, makeCar } from './vehicles.js';
 import { spawnPeds, updatePeds, scarePeds } from './pedestrians.js';
 import { createWanted, addCrime, updateWanted, spawnPolice, updatePolice } from './police.js';
 import { createCombat, tryPunch, tryShoot, updateCombat } from './combat.js';
-import { createMissionState, startMission, advanceDialogue, updateMissions, MISSIONS } from './missions.js';
+import { createMissionState, startMission, advanceDialogue, updateMissions, activateChoice, applyChoice, MISSIONS } from './missions.js';
+import { createSideState, updateSideQuests } from './sidequests.js';
+import { ENDINGS, endingRecordLine } from './endings.js';
 import { createCamera, drawWorld } from './render.js';
 import { drawHUD } from './hud.js';
 import { stageShot } from './shots.js';
@@ -36,10 +40,11 @@ const game = {
   player: { x: 760, y: 700, angle: 0, health: PLAYER.health, money: save.money, carId: null },
   cars: [], peds: [], wanted: createWanted(), combat: createCombat(),
   missions: createMissionState(save), camera: createCamera(),
+  side: createSideState(save), stats: save.stats, choices: save.choices, endingsUnlocked: save.endings, ending: null,
   floaters: [], bustMeter: 0, playerSeen: false, endTimer: 0, endKind: '', crimeCooldown: 0,
   playerPos() { const c = this.playerCar(); return c ? { x: c.x, y: c.y } : this.player; },
   playerCar() { return this.cars.find((c) => c.id === this.player.carId) || null; },
-  persist() { storeSave({ money: this.player.money, mission: this.missions.index, started: true }); },
+  persist() { storeSave({ money: this.player.money, mission: this.missions.index, started: true, sideDone: this.side.done, stats: this.stats, choices: this.choices, endings: this.endingsUnlocked }); },
   enterCarSilent(car) { this.player.carId = car.id; car.driver = 'player'; car.parked = false; },
   startCurrentMissionSilent() { const keep = this.missions.index; this.missions = createMissionState({ mission: keep }); startMission(this); this.missions.dialogue = null; this.missions.dialogueQueue = []; },
 };
@@ -53,6 +58,7 @@ if ((save.mission || 0) <= 1) {
 }
 if (!shot && save.started && save.mission < MISSIONS.length) startMission(game);
 if (shot) stageShot(game, shot);
+window.__game = game; // lets the maker's own playtest script stage and inspect a run
 
 let lastCarHealth = new Map();
 function nearestCar(pos, r) { let best = null, bd = r; for (const c of game.cars) { const d = Math.hypot(c.x - pos.x, c.y - pos.y); if (d < bd) { bd = d; best = c; } } return best; }
@@ -71,7 +77,9 @@ function exitCar() {
 function endRun(kind) {
   if (game.screen !== 'play') return;
   game.screen = kind; game.endTimer = 0; audio.busted(); audio.setEngine(false); audio.setSiren(false);
+  if (kind === 'busted') { game.stats.busts++; } // busts are on Vera's permanent record - they steer the ending
   game.player.money = Math.max(0, game.player.money - (kind === 'busted' ? 150 : 100));
+  game.persist();
 }
 function respawn() {
   game.player.health = PLAYER.health; game.player.x = 760; game.player.y = 700; game.player.carId = null;
@@ -86,9 +94,18 @@ function update(dt) {
   game.floaters = game.floaters.filter((f) => f.t > 0);
   if (game.screen === 'title') { if (input.wasPressed('Enter') || input.mouse.clicked) { audio.unlock(); game.screen = 'play'; if (!save.started && game.missions.index === 0 && !game.missions.dialogue) startMission(game); game.persist(); } return; }
   if (game.screen === 'busted' || game.screen === 'wasted') { game.endTimer += dt; if (game.endTimer > 1.6 && (input.wasPressed('Enter') || input.mouse.clicked)) respawn(); return; }
+  if (game.screen === 'ending') { game.endTimer += dt; if (game.endTimer > 1.2 && (input.wasPressed('Enter') || input.mouse.clicked)) { game.screen = 'play'; game.ending = null; } return; }
   if (game.screen === 'paused') { if (input.wasPressed('Escape') || input.wasPressed('KeyP')) game.screen = 'play'; return; }
   if (input.wasPressed('Escape') || input.wasPressed('KeyP')) { game.screen = 'paused'; return; }
   if (game.missions.dialogue) { if (input.wasPressed('Enter') || input.mouse.clicked) advanceDialogue(game); return; }
+  // Story choice beats freeze the action until Vera decides (keys 1/2 or click an option).
+  if (!game.missions.choice && game.missions.pendingChoices.length && !game.missions.complete) activateChoice(game, game.missions.pendingChoices.shift());
+  if (game.missions.choice) {
+    let pick = input.choiceIndex();
+    if (pick < 0 && input.mouse.clicked) pick = input.mouse.y > view.h - 88 ? 1 : 0;
+    if (pick >= 0) { applyChoice(game, pick); input.endFrame(); } // consume the press: one keypress must never answer two beats in the same frame's later ticks
+    return;
+  }
 
   const p = game.player, car = game.playerCar();
   game.crimeCooldown = Math.max(0, game.crimeCooldown - dt);
@@ -105,7 +122,7 @@ function update(dt) {
     // Running over peds and hitting cars.
     for (const ped of game.peds) {
       if (ped.down <= 0 && Math.abs(car.speed) > 55 && Math.hypot(ped.x - car.x, ped.y - car.y) < 26) {
-        ped.down = 6; audio.hit(); p.health -= 1; addCrime(game.wanted, 0.9, game); scarePeds(game.peds, car.x, car.y, 220);
+        ped.down = 6; audio.hit(); p.health -= 1; game.stats.kills++; addCrime(game.wanted, 0.9, game); scarePeds(game.peds, car.x, car.y, 220);
         game.floaters.push({ x: ped.x, y: ped.y - 26, text: 'PEDESTRIAN HIT!', t: 1.2, color: '#ff7675' });
       }
     }
@@ -141,6 +158,7 @@ function update(dt) {
   audio.setSiren(game.wanted.stars > 0 && game.playerSeen);
   updateCombat(game, dt);
   updateMissions(game, dt);
+  if (game.screen === 'play') updateSideQuests(game, dt);
   // Health regen, bust and wasted checks.
   if (p.health < PLAYER.health && game.wanted.stars === 0) p.health = Math.min(PLAYER.health, p.health + dt * 3);
   if (game.bustMeter >= 1) endRun('busted');
@@ -157,9 +175,29 @@ function draw() {
     const near = nearestCar(game.player, 52);
     if (near) { ctx.fillStyle = 'rgba(12,16,24,0.8)'; ctx.fillRect(view.w / 2 - 90, view.h - 170, 180, 28); ctx.fillStyle = '#fff'; ctx.font = 'bold 14px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('Press E to steal car', view.w / 2, view.h - 151); }
   }
-  if (game.screen === 'paused') overlay('PAUSED', 'Esc / P to resume - your progress is saved');
+  if (game.screen === 'paused') { overlay('PAUSED', 'Esc / P to resume - your progress is saved'); drawRecord(); }
   if (game.screen === 'busted') overlay('BUSTED', 'The Palm Cove police take $150. Press Enter to walk free.');
   if (game.screen === 'wasted') overlay('WASTED', 'You wake up at Cove Clinic, $100 lighter. Press Enter.');
+  if (game.screen === 'ending' && game.ending) drawEnding();
+}
+// The ending screen: names the ending, narrates it, shows the record that earned it.
+function drawEnding() {
+  const e = game.ending;
+  ctx.fillStyle = 'rgba(8,8,18,0.82)'; ctx.fillRect(0, 0, view.w, view.h);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = e.color; ctx.font = 'bold 22px ' + FONT; ctx.fillText('— ' + e.tag + ' —', view.w / 2, view.h / 2 - 128);
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 58px ' + FONT; ctx.fillText(e.name, view.w / 2, view.h / 2 - 62);
+  ctx.font = '17px ' + FONT; ctx.fillStyle = '#ffeaa7';
+  e.lines.forEach((line, i) => ctx.fillText(line, view.w / 2, view.h / 2 - 8 + i * 26));
+  ctx.font = '14px ' + FONT; ctx.fillStyle = '#dfe6e9';
+  ctx.fillText('YOUR RECORD: ' + endingRecordLine(game), view.w / 2, view.h / 2 + 84);
+  ctx.fillStyle = '#55efc4'; ctx.font = 'bold 16px ' + FONT;
+  ctx.fillText('Endings found: ' + game.endingsUnlocked.length + ' / ' + ENDINGS.length + '   —   Press Enter: free roam Palm Cove', view.w / 2, view.h / 2 + 122);
+}
+function drawRecord() {
+  ctx.fillStyle = '#dfe6e9'; ctx.font = '15px ' + FONT; ctx.textAlign = 'center';
+  ctx.fillText(endingRecordLine(game), view.w / 2, view.h / 2 + 66);
+  ctx.fillText('Endings found: ' + game.endingsUnlocked.length + ' / ' + ENDINGS.length, view.w / 2, view.h / 2 + 92);
 }
 function overlay(title, sub) {
   ctx.fillStyle = title === 'BUSTED' ? 'rgba(9,60,140,0.55)' : 'rgba(10,10,16,0.6)'; ctx.fillRect(0, 0, view.w, view.h);
@@ -178,9 +216,12 @@ function drawTitle() {
   ctx.fillStyle = '#fff'; ctx.font = '17px ' + FONT;
   ctx.fillText('Vera Solano owes fixer Lucia Marrero a fortune. Work it off across a sun-soaked city:', view.w / 2, 252);
   ctx.fillText('run packages, deliver hot cars, shake down a bookie and outrun the law - then the city is yours.', view.w / 2, 276);
+  ctx.fillStyle = '#81ecec';
+  ctx.fillText('Side jobs pay extra: taxi fares, street races, vigilante work, courier runs, repo jobs.', view.w / 2, 300);
+  ctx.fillText('Your choices and your record decide the ending - there are ' + ENDINGS.length + ' of them. Endings found: ' + game.endingsUnlocked.length + '/' + ENDINGS.length, view.w / 2, 322);
   ctx.font = '16px ' + FONT; ctx.fillStyle = '#ffeaa7';
-  const controls = ['WASD / Arrows - move & drive', 'Shift - sprint    Space - handbrake', 'E - steal / enter / exit car', 'F - punch    Mouse - aim, Click - shoot', 'Esc / P - pause'];
-  controls.forEach((c, i) => ctx.fillText(c, view.w / 2, 330 + i * 26));
+  const controls = ['WASD / Arrows - move & drive', 'Shift - sprint    Space - handbrake', 'E - steal / enter / exit car', 'F - punch    Mouse - aim, Click - shoot', '1 / 2 - make a story choice    Esc / P - pause'];
+  controls.forEach((c, i) => ctx.fillText(c, view.w / 2, 356 + i * 26));
   ctx.fillStyle = 'rgba(12,16,24,0.75)'; ctx.fillRect(view.w / 2 - 170, 486, 340, 56);
   ctx.fillStyle = '#55efc4'; ctx.font = 'bold 24px ' + FONT;
   ctx.fillText(save.started ? '▶  CONTINUE  (Enter)' : '▶  START STORY  (Enter)', view.w / 2, 522);
